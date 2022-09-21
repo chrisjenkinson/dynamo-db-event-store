@@ -58,6 +58,3 @@ jobs:
 
       - name: Run phpstan
         run: composer run-script phpstan
-
-      - name: Run infection
-        run: composer run-script infection
