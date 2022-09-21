@@ -1,0 +1,51 @@
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: PHP ${{ matrix.php-versions }}
+    runs-on: ubuntu-latest
+    services:
+      dynamodb-local:
+        image: amazon/dynamodb-local:latest
+        ports:
+          - 8000:8000/tcp
+    strategy:
+      matrix:
+        php-versions: ['8.1']
+    env: 
+      AWS_ACCESS_KEY_ID: 'none'
+      AWS_SECRET_ACCESS_KEY: 'none'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Validate composer.json and composer.lock
+        run: composer validate --strict
+
+      - name: Cache Composer packages
+        id: composer-cache
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Run phpunit
+        run: composer run-script phpunit
+
+      - name: Run phpstan
+        run: composer run-script phpstan
+
+      - name: Run infection
+        run: composer run-script infection
