@@ -11,6 +11,7 @@ jobs:
   build:
     name: PHP ${{ matrix.php-versions }}
     runs-on: ubuntu-latest
+    container: ubuntu-latest
     services:
       dynamodb-local:
         image: amazon/dynamodb-local:latest
