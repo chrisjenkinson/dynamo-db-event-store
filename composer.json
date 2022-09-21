@@ -37,9 +37,18 @@
         }
     },
     "scripts": {
-        "test": [
-            "phpunit",
-            "infection --threads=max",
+        "tests": [
+            "@phpunit",
+            "@infection",
+            "@phpstan"
+        ],
+        "phpunit": [
+            "phpunit"
+        ],
+        "infection": [
+            "infection --threads=max"
+        ],
+        "phpstan": [
             "phpstan"
         ]
     }
