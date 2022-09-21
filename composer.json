@@ -1,6 +1,6 @@
 {
     "name": "chrisjenkinson/dynamo-db-event-store",
-    "description": "Event Store for Broadway using DynamoDB",
+    "description": "Event store for Broadway using DynamoDB",
     "type": "library",
     "require": {
         "async-aws/dynamo-db": "1.3.0",
