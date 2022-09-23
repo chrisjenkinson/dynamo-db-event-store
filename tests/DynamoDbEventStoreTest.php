@@ -49,6 +49,19 @@ final class DynamoDbEventStoreTest extends TestCase
         $this->assertCount(1, $events);
     }
 
+    public function test_it_does_nothing_when_appending_an_empty_event_stream(): void
+    {
+        $this->expectException(EventStreamNotFoundException::class);
+
+        $eventStore = $this->createEventStore();
+
+        $id = new TestAggregateId('123');
+
+        $eventStore->append($id, new DomainEventStream([]));
+
+        $eventStore->load($id);
+    }
+
     public function test_it_loads_events_from_a_playhead(): void
     {
         $eventStore = $this->createEventStore();
