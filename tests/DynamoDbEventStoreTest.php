@@ -59,7 +59,7 @@ final class DynamoDbEventStoreTest extends TestCase
 
         $eventStore->append($id, new DomainEventStream([]));
 
-        $$eventStore->load($id);
+        $eventStore->load($id);
     }
 
     public function test_it_loads_events_from_a_playhead(): void
