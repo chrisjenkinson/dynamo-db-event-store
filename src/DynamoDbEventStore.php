@@ -58,6 +58,10 @@ final class DynamoDbEventStore implements EventStore
     {
         $events = iterator_to_array($eventStream);
 
+        if ([] === $events) {
+            return;
+        }
+
         $putRequests = array_map(function (DomainMessage $domainMessage): array {
             return [
                 'PutRequest' => $this->inputBuilder->buildPutRequest($this->domainMessageNormalizer->normalize($domainMessage)),
