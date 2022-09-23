@@ -27,7 +27,7 @@ final class DynamoDbEventStore implements EventStore
         $result = $this->client->query($this->inputBuilder->buildQueryInput($this->table, $id));
 
         if (0 === $result->getCount()) {
-            throw new EventStreamNotFoundException(sprintf('Event stream not found for aggregated with id "%s" in table "%s"', $id, $this->table));
+            throw new EventStreamNotFoundException(sprintf('Event stream not found for aggregate with id "%s" in table "%s"', $id, $this->table));
         }
 
         $events = [];
