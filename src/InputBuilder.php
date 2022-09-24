@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace chrisjenkinson\DynamoDbEventStore;
 
-use AsyncAws\DynamoDb\Input\BatchWriteItemInput;
 use AsyncAws\DynamoDb\Input\CreateTableInput;
 use AsyncAws\DynamoDb\Input\DeleteTableInput;
 use AsyncAws\DynamoDb\Input\DescribeTableInput;
+use AsyncAws\DynamoDb\Input\PutItemInput;
 use AsyncAws\DynamoDb\Input\QueryInput;
 use AsyncAws\DynamoDb\ValueObject\AttributeDefinition;
 use AsyncAws\DynamoDb\ValueObject\AttributeValue;
 use AsyncAws\DynamoDb\ValueObject\KeySchemaElement;
-use AsyncAws\DynamoDb\ValueObject\PutRequest;
 
 final class InputBuilder
 {
@@ -90,11 +89,11 @@ final class InputBuilder
     /**
      * @param array{id: string, playhead: int, metadataClass: string, metadataPayload: string, payloadClass: string, payloadPayload: string, recordedOn: string, type: string} $normalizedDomainMessage
      */
-    public function buildPutRequest(array $normalizedDomainMessage): PutRequest
+    public function buildPutItemInput(string $tableName, array $normalizedDomainMessage): PutItemInput
     {
-        return new PutRequest([
-            'Item' => [
-
+        return new PutItemInput([
+            'TableName' => $tableName,
+            'Item'      => [
                 'Id' => new AttributeValue([
                     'S' => $normalizedDomainMessage['id'],
                 ]),
@@ -128,18 +127,7 @@ final class InputBuilder
                     'S' => $normalizedDomainMessage['type'],
                 ]),
             ],
-        ]);
-    }
-
-    /**
-     * @param array<array{PutRequest: PutRequest}> $putRequests
-     */
-    public function buildBatchWriteItemInput(string $tableName, array $putRequests): BatchWriteItemInput
-    {
-        return new BatchWriteItemInput([
-            'RequestItems' => [
-                $tableName => $putRequests,
-            ],
+            'ConditionExpression' => 'attribute_not_exists(Id)',
         ]);
     }
 }
