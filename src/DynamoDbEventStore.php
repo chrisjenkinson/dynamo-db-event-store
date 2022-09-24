@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace chrisjenkinson\DynamoDbEventStore;
 
 use AsyncAws\DynamoDb\DynamoDbClient;
+use AsyncAws\DynamoDb\Exception\ConditionalCheckFailedException;
 use Broadway\Domain\DomainEventStream;
 use Broadway\Domain\DomainMessage;
 use Broadway\EventStore\EventStore;
 use Broadway\EventStore\EventStreamNotFoundException;
+use Broadway\EventStore\Exception\DuplicatePlayheadException;
 
 final class DynamoDbEventStore implements EventStore
 {
@@ -56,19 +58,21 @@ final class DynamoDbEventStore implements EventStore
 
     public function append($id, DomainEventStream $eventStream): void
     {
+        $id = (string) $id;
+
         $events = iterator_to_array($eventStream);
 
         if ([] === $events) {
             return;
         }
 
-        $putRequests = array_map(function (DomainMessage $domainMessage): array {
-            return [
-                'PutRequest' => $this->inputBuilder->buildPutRequest($this->domainMessageNormalizer->normalize($domainMessage)),
-            ];
-        }, $events);
-
-        $this->client->batchWriteItem($this->inputBuilder->buildBatchWriteItemInput($this->table, $putRequests));
+        try {
+            array_map(function (DomainMessage $domainMessage): void {
+                $this->client->putItem($this->inputBuilder->buildPutItemInput($this->table, $this->domainMessageNormalizer->normalize($domainMessage)));
+            }, $events);
+        } catch (ConditionalCheckFailedException $e) {
+            throw new DuplicatePlayheadException($eventStream, $e);
+        }
     }
 
     public function deleteTable(): void
