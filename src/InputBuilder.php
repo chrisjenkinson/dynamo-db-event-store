@@ -9,6 +9,7 @@ use AsyncAws\DynamoDb\Input\DeleteTableInput;
 use AsyncAws\DynamoDb\Input\DescribeTableInput;
 use AsyncAws\DynamoDb\Input\PutItemInput;
 use AsyncAws\DynamoDb\Input\QueryInput;
+use AsyncAws\DynamoDb\Input\ScanInput;
 use AsyncAws\DynamoDb\ValueObject\AttributeDefinition;
 use AsyncAws\DynamoDb\ValueObject\AttributeValue;
 use AsyncAws\DynamoDb\ValueObject\KeySchemaElement;
@@ -41,6 +42,13 @@ final class InputBuilder
                     'N' => (string) $playhead,
                 ]),
             ],
+        ]);
+    }
+
+    public function buildScanInput(string $tableName): ScanInput
+    {
+        return new ScanInput([
+            'TableName' => $tableName,
         ]);
     }
 

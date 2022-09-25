@@ -8,11 +8,12 @@ use AsyncAws\DynamoDb\DynamoDbClient;
 use AsyncAws\DynamoDb\Exception\ConditionalCheckFailedException;
 use Broadway\Domain\DomainEventStream;
 use Broadway\Domain\DomainMessage;
-use Broadway\EventStore\EventStore;
 use Broadway\EventStore\EventStreamNotFoundException;
+use Broadway\EventStore\EventVisitor;
 use Broadway\EventStore\Exception\DuplicatePlayheadException;
+use Broadway\EventStore\Management\Criteria;
 
-final class DynamoDbEventStore implements EventStore
+final class DynamoDbEventStore implements DynamoDbEventStoreInterface
 {
     public function __construct(
         private readonly DynamoDbClient $client,
@@ -92,5 +93,18 @@ final class DynamoDbEventStore implements EventStore
         $this->client->createTable($this->inputBuilder->buildCreateTableInput($this->table));
 
         $this->client->tableExists($this->inputBuilder->buildDescribeTableInput($this->table))->wait();
+    }
+
+    public function visitEvents(Criteria $criteria, EventVisitor $eventVisitor): void
+    {
+        $result = $this->client->scan($this->inputBuilder->buildScanInput($this->table));
+
+        foreach ($result->getItems() as $normalizedDomainMessage) {
+            $domainMessage = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
+
+            if ($criteria->isMatchedBy($domainMessage)) {
+                $eventVisitor->doWithEvent($domainMessage);
+            }
+        }
     }
 }
