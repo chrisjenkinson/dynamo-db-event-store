@@ -3,7 +3,7 @@
     "description": "Event store for Broadway using DynamoDB",
     "type": "library",
     "require": {
-        "async-aws/dynamo-db": "^1.3.0",
+        "async-aws/dynamo-db": "^1.3.0 || ^3.0.0",
         "broadway/broadway": "^2.4.0",
         "ext-json": "*"
     },
