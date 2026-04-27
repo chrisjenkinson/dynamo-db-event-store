@@ -29,7 +29,7 @@
         "symplify/easy-coding-standard": "^11.1.0 || ^12.0.0",
         "symfony/polyfill-intl-grapheme": "^1.26.0",
         "phpstan/phpstan": "^1.8.0",
-        "infection/infection": "^0.26.0",
+        "infection/infection": "^0.26.0 || ^0.32.0",
         "ramsey/uuid": "^4.5.0"
     },
     "config": {
