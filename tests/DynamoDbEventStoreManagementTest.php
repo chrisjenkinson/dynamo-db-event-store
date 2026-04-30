@@ -57,6 +57,47 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
         self::assertSame($aggregateIdA, $lastTwo[1]->getId());
     }
 
+    public function test_it_loads_the_first_replay_page_in_global_position_order(): void
+    {
+        $aggregateIdB = 'aggregate-b';
+        $aggregateIdA = 'aggregate-a';
+
+        $this->dynamoEventStore->append($aggregateIdB, new DomainEventStream([
+            DomainMessage::recordNow($aggregateIdB, 0, new Metadata([]), new Start()),
+        ]));
+        $this->dynamoEventStore->append($aggregateIdA, new DomainEventStream([
+            DomainMessage::recordNow($aggregateIdA, 0, new Metadata([]), new Start()),
+        ]));
+
+        $page   = $this->dynamoEventStore->loadReplayPageAfterGlobalPosition(Criteria::create(), 24, 2);
+        $events = $page->events();
+
+        self::assertCount(2, $events);
+        self::assertSame($aggregateIdB, $events[0]->message()->getId());
+        self::assertSame(25, $events[0]->globalPosition());
+        self::assertSame($aggregateIdA, $events[1]->message()->getId());
+        self::assertSame(26, $events[1]->globalPosition());
+        self::assertSame(26, $page->lastProcessedGlobalPosition());
+    }
+
+    public function test_it_loads_a_later_page_after_a_checkpoint(): void
+    {
+        $aggregateId = 'aggregate-a';
+
+        $this->dynamoEventStore->append($aggregateId, new DomainEventStream([
+            DomainMessage::recordNow($aggregateId, 0, new Metadata([]), new Start()),
+            DomainMessage::recordNow($aggregateId, 1, new Metadata([]), new Start()),
+            DomainMessage::recordNow($aggregateId, 2, new Metadata([]), new Start()),
+        ]));
+
+        $page   = $this->dynamoEventStore->loadReplayPageAfterGlobalPosition(Criteria::create(), 25, 2);
+        $events = $page->events();
+
+        self::assertCount(2, $events);
+        self::assertSame(26, $events[0]->globalPosition());
+        self::assertSame(27, $events[1]->globalPosition());
+    }
+
     public function test_it_can_query_replay_events_after_a_checkpoint(): void
     {
         $inputBuilder = new InputBuilder();
@@ -66,53 +107,14 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
         self::assertSame('7', $input->getExpressionAttributeValues()[':globalPosition']->getN());
     }
 
-    public function test_it_replays_only_events_after_a_checkpoint_and_returns_the_last_processed_global_position(): void
+    public function test_it_can_query_replay_events_after_a_checkpoint_with_a_limit(): void
     {
-        $aggregateIdA = 'aggregate-a';
-        $aggregateIdB = 'aggregate-b';
+        $inputBuilder = new InputBuilder();
+        $input        = $inputBuilder->buildGlobalReplayInput('table', 7, 3);
 
-        $this->dynamoEventStore->append($aggregateIdA, new DomainEventStream([
-            DomainMessage::recordNow($aggregateIdA, 0, new Metadata([]), new Start()),
-        ]));
-        $this->dynamoEventStore->append($aggregateIdB, new DomainEventStream([
-            DomainMessage::recordNow($aggregateIdB, 0, new Metadata([]), new Start()),
-            DomainMessage::recordNow($aggregateIdB, 1, new Metadata([]), new Start()),
-        ]));
-
-        $visitor                     = new CollectingEventVisitor();
-        $lastProcessedGlobalPosition = $this->dynamoEventStore->visitEventsAfterGlobalPosition(
-            Criteria::create(),
-            25,
-            $visitor
-        );
-
-        $visitedEvents = $visitor->visitedEvents;
-        self::assertSame(27, $lastProcessedGlobalPosition);
-        self::assertCount(2, $visitedEvents);
-        self::assertSame($aggregateIdB, $visitedEvents[0]->getId());
-        self::assertSame(0, $visitedEvents[0]->getPlayhead());
-        self::assertSame($aggregateIdB, $visitedEvents[1]->getId());
-        self::assertSame(1, $visitedEvents[1]->getPlayhead());
-    }
-
-    public function test_it_returns_the_original_checkpoint_when_no_events_are_replayed(): void
-    {
-        $aggregateId = 'aggregate-a';
-
-        $this->dynamoEventStore->append($aggregateId, new DomainEventStream([
-            DomainMessage::recordNow($aggregateId, 0, new Metadata([]), new Start()),
-        ]));
-
-        $visitor                     = new CollectingEventVisitor();
-        $lastProcessedGlobalPosition = $this->dynamoEventStore->visitEventsAfterGlobalPosition(
-            Criteria::create(),
-            99,
-            $visitor
-        );
-
-        $visitedEvents = $visitor->visitedEvents;
-        self::assertSame(99, $lastProcessedGlobalPosition);
-        self::assertSame([], $visitedEvents);
+        self::assertSame('Feed = :feed AND GlobalPosition > :globalPosition', $input->getKeyConditionExpression());
+        self::assertSame('7', $input->getExpressionAttributeValues()[':globalPosition']->getN());
+        self::assertSame(3, $input->getLimit());
     }
 
     public function test_it_advances_the_checkpoint_past_filtered_events(): void
@@ -128,19 +130,40 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
             DomainMessage::recordNow($aggregateIdB, 1, new Metadata([]), new \Broadway\EventStore\Management\Testing\Middle('x')),
         ]));
 
-        $visitor                     = new CollectingEventVisitor();
-        $lastProcessedGlobalPosition = $this->dynamoEventStore->visitEventsAfterGlobalPosition(
+        $page = $this->dynamoEventStore->loadReplayPageAfterGlobalPosition(
             Criteria::create()->withEventTypes([
                 'Broadway.EventStore.Management.Testing.Start',
             ]),
             25,
-            $visitor
+            2
         );
 
-        self::assertSame(27, $lastProcessedGlobalPosition);
-        self::assertCount(1, $visitor->visitedEvents);
-        self::assertSame($aggregateIdB, $visitor->visitedEvents[0]->getId());
-        self::assertSame(0, $visitor->visitedEvents[0]->getPlayhead());
+        self::assertSame(27, $page->lastProcessedGlobalPosition());
+        self::assertCount(1, $page->events());
+        self::assertSame($aggregateIdB, $page->events()[0]->message()->getId());
+        self::assertSame(0, $page->events()[0]->message()->getPlayhead());
+    }
+
+    public function test_it_visits_all_events_by_draining_replay_pages(): void
+    {
+        $aggregateIdB = 'aggregate-b';
+        $aggregateIdA = 'aggregate-a';
+
+        $this->dynamoEventStore->append($aggregateIdB, new DomainEventStream([
+            DomainMessage::recordNow($aggregateIdB, 0, new Metadata([]), new Start()),
+        ]));
+        $this->dynamoEventStore->append($aggregateIdA, new DomainEventStream([
+            DomainMessage::recordNow($aggregateIdA, 0, new Metadata([]), new Start()),
+        ]));
+
+        $visitor = new RecordingEventVisitor();
+        $this->dynamoEventStore->visitEvents(Criteria::create(), $visitor);
+
+        $visitedEvents = $visitor->getVisitedEvents();
+        $lastTwo       = array_slice($visitedEvents, -2);
+
+        self::assertSame($aggregateIdB, $lastTwo[0]->getId());
+        self::assertSame($aggregateIdA, $lastTwo[1]->getId());
     }
 
     public function test_it_creates_a_global_position_index_for_replay(): void

@@ -206,7 +206,7 @@ final class InputBuilder
         ]);
     }
 
-    public function buildGlobalReplayInput(string $tableName, ?int $afterGlobalPosition = null): QueryInput
+    public function buildGlobalReplayInput(string $tableName, ?int $afterGlobalPosition = null, ?int $limit = null): QueryInput
     {
         $keyCondition              = 'Feed = :feed';
         $expressionAttributeValues = [
@@ -228,6 +228,7 @@ final class InputBuilder
             'IndexName'                 => 'Feed-GlobalPosition-index',
             'KeyConditionExpression'    => $keyCondition,
             'ExpressionAttributeValues' => $expressionAttributeValues,
+            'Limit'                     => $limit,
         ]);
     }
 

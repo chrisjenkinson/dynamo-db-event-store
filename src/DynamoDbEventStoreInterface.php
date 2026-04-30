@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace chrisjenkinson\DynamoDbEventStore;
 
 use Broadway\EventStore\EventStore;
-use Broadway\EventStore\EventVisitor;
 use Broadway\EventStore\Management\Criteria;
 use Broadway\EventStore\Management\EventStoreManagement;
 
@@ -15,5 +14,5 @@ interface DynamoDbEventStoreInterface extends EventStore, EventStoreManagement
 
     public function deleteTable(): void;
 
-    public function visitEventsAfterGlobalPosition(Criteria $criteria, int $afterGlobalPosition, EventVisitor $eventVisitor): int;
+    public function loadReplayPageAfterGlobalPosition(Criteria $criteria, int $afterGlobalPosition, int $limit): ReplayPage;
 }

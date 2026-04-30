@@ -8,9 +8,7 @@ use AsyncAws\DynamoDb\DynamoDbClient;
 use AsyncAws\DynamoDb\Input\QueryInput;
 use AsyncAws\DynamoDb\Result\QueryOutput;
 use AsyncAws\DynamoDb\ValueObject\AttributeValue;
-use Broadway\Domain\DomainMessage;
 use Broadway\EventStore\EventStreamNotFoundException;
-use Broadway\EventStore\EventVisitor;
 use Broadway\EventStore\Management\Criteria;
 use Broadway\Serializer\SimpleInterfaceSerializer;
 use chrisjenkinson\DynamoDbEventStore\DomainMessageNormalizer;
@@ -18,6 +16,7 @@ use chrisjenkinson\DynamoDbEventStore\DynamoDbEventStore;
 use chrisjenkinson\DynamoDbEventStore\InputBuilder;
 use chrisjenkinson\DynamoDbEventStore\JsonDecoder;
 use chrisjenkinson\DynamoDbEventStore\JsonEncoder;
+use chrisjenkinson\DynamoDbEventStore\ReplayPage;
 use PHPUnit\Framework\TestCase;
 
 final class DynamoDbEventStoreConsistencyTest extends TestCase
@@ -47,29 +46,25 @@ final class DynamoDbEventStoreConsistencyTest extends TestCase
         self::assertTrue($capturedInput->getConsistentRead());
     }
 
-    public function test_it_uses_the_global_position_query_for_checkpoint_replay(): void
+    public function test_it_uses_the_global_position_query_for_replay_pages(): void
     {
         $capturedInput = null;
         $eventStore    = $this->createEventStore($this->createQueryRecordingClient($capturedInput));
 
-        $lastProcessedGlobalPosition = $eventStore->visitEventsAfterGlobalPosition(
-            Criteria::create(),
-            7,
-            new class() implements EventVisitor {
-                public function doWithEvent(DomainMessage $domainMessage): void
-                {
-                }
-            }
-        );
+        $page = $eventStore->loadReplayPageAfterGlobalPosition(Criteria::create(), 7, 3);
 
-        self::assertSame(7, $lastProcessedGlobalPosition);
         self::assertInstanceOf(QueryInput::class, $capturedInput);
         self::assertSame('Feed-GlobalPosition-index', $capturedInput->getIndexName());
         self::assertSame('Feed = :feed AND GlobalPosition > :globalPosition', $capturedInput->getKeyConditionExpression());
+        self::assertSame(3, $capturedInput->getLimit());
         self::assertFalse($capturedInput->getConsistentRead());
+        self::assertInstanceOf(ReplayPage::class, $page);
+        self::assertSame(7, $page->lastProcessedGlobalPosition());
+        self::assertFalse($page->hasMore());
+        self::assertSame([], $page->events());
     }
 
-    public function test_it_does_not_surface_the_counter_row_during_checkpoint_replay(): void
+    public function test_it_excludes_the_counter_row_from_replay_pages(): void
     {
         $queryResult = $this->createStub(QueryOutput::class);
         $queryResult->method('getItems')->willReturn([
@@ -128,22 +123,35 @@ final class DynamoDbEventStoreConsistencyTest extends TestCase
                 ]),
             ],
         ]);
+        $queryResult->method('getLastEvaluatedKey')->willReturn([]);
 
         $client = $this->createStub(DynamoDbClient::class);
         $client->method('query')->willReturn($queryResult);
 
-        $eventStore = $this->createEventStore($client);
-        $visitor    = new CollectingEventVisitor();
+        $page = $this->createEventStore($client)->loadReplayPageAfterGlobalPosition(Criteria::create(), 0, 1);
 
-        $lastProcessedGlobalPosition = $eventStore->visitEventsAfterGlobalPosition(
-            Criteria::create(),
-            0,
-            $visitor
-        );
+        self::assertCount(1, $page->events());
+        self::assertSame(2, $page->lastProcessedGlobalPosition());
+        self::assertFalse($page->hasMore());
+        self::assertSame('aggregate-id', $page->events()[0]->message()->getId());
+    }
 
-        self::assertSame(2, $lastProcessedGlobalPosition);
-        self::assertCount(1, $visitor->visitedEvents);
-        self::assertSame('aggregate-id', $visitor->visitedEvents[0]->getId());
+    public function test_it_reports_has_more_when_dynamodb_returns_a_continuation_key(): void
+    {
+        $queryResult = $this->createStub(QueryOutput::class);
+        $queryResult->method('getItems')->willReturn([]);
+        $queryResult->method('getLastEvaluatedKey')->willReturn([
+            'Id' => new AttributeValue([
+                'S' => 'aggregate-id',
+            ]),
+        ]);
+
+        $client = $this->createStub(DynamoDbClient::class);
+        $client->method('query')->willReturn($queryResult);
+
+        $page = $this->createEventStore($client)->loadReplayPageAfterGlobalPosition(Criteria::create(), 7, 3);
+
+        self::assertTrue($page->hasMore());
     }
 
     private function createEventStore(DynamoDbClient $client, bool $aggregateConsistentReads = false): DynamoDbEventStore

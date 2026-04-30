@@ -112,26 +112,42 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
 
     public function visitEvents(Criteria $criteria, EventVisitor $eventVisitor): void
     {
-        $this->visitEventsAfterGlobalPosition($criteria, 0, $eventVisitor);
+        $checkpoint = 0;
+
+        do {
+            $page = $this->loadReplayPageAfterGlobalPosition($criteria, $checkpoint, 1000);
+
+            foreach ($page->events() as $event) {
+                $eventVisitor->doWithEvent($event->message());
+            }
+
+            $checkpoint = $page->lastProcessedGlobalPosition();
+        } while ($page->hasMore());
     }
 
-    public function visitEventsAfterGlobalPosition(Criteria $criteria, int $afterGlobalPosition, EventVisitor $eventVisitor): int
+    public function loadReplayPageAfterGlobalPosition(Criteria $criteria, int $afterGlobalPosition, int $limit): ReplayPage
     {
-        $lastProcessedGlobalPosition = $afterGlobalPosition;
-        $result                      = $this->client->query($this->inputBuilder->buildGlobalReplayInput($this->table, $afterGlobalPosition));
+        if ($limit < 1) {
+            throw new \InvalidArgumentException('Replay page limit must be at least 1.');
+        }
 
-        foreach ($result->getItems() as $normalizedDomainMessage) {
+        $lastProcessedGlobalPosition = $afterGlobalPosition;
+        $events                      = [];
+        $result                      = $this->client->query($this->inputBuilder->buildGlobalReplayInput($this->table, $afterGlobalPosition, $limit));
+
+        foreach ($result->getItems(true) as $normalizedDomainMessage) {
             if ('_counter' === $normalizedDomainMessage['Id']->getS()) {
                 continue;
             }
 
             $lastProcessedGlobalPosition = (int) $normalizedDomainMessage['GlobalPosition']->getN();
             $domainMessage               = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
+
             if ($criteria->isMatchedBy($domainMessage)) {
-                $eventVisitor->doWithEvent($domainMessage);
+                $events[] = new ReplayEvent($domainMessage, $lastProcessedGlobalPosition);
             }
         }
 
-        return $lastProcessedGlobalPosition;
+        return new ReplayPage($events, $lastProcessedGlobalPosition, [] !== $result->getLastEvaluatedKey());
     }
 }
