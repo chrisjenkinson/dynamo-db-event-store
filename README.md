@@ -119,9 +119,23 @@ $eventStore->visitEvents(new Criteria(), $eventVisitor);
 
 Events are visited in `GlobalPosition` order, so cross-aggregate replay reflects the exact interleaving in which events were appended.
 
+#### Resume Replay From a Checkpoint
+
+```php
+use Broadway\EventStore\Management\Criteria;
+
+$lastProcessedGlobalPosition = $eventStore->visitEventsAfterGlobalPosition(
+    Criteria::create(),
+    $checkpoint,
+    $eventVisitor
+);
+```
+
+This replays only events with `GlobalPosition > $checkpoint` and returns the last global position scanned from the ordered feed. If no events are replayed, it returns the input checkpoint unchanged.
+
 ## Replay Ordering
 
-Aggregate streams are ordered by `Playhead`. Cross-aggregate replay (`visitEvents`) uses `GlobalPosition`, assigned atomically per append batch and stored in a DynamoDB Global Secondary Index. Events are always visited in the order they were committed, regardless of aggregate ID.
+Aggregate streams are ordered by `Playhead`. Cross-aggregate replay (`visitEvents`, `visitEventsAfterGlobalPosition`) uses `GlobalPosition`, assigned atomically per append batch and stored in a DynamoDB Global Secondary Index. Events are always visited in the order they were committed, regardless of aggregate ID.
 
 ## Read Consistency
 
@@ -131,7 +145,7 @@ Aggregate stream reads (`load`, `loadFromPlayhead`) use eventually consistent re
 $eventStore = new DynamoDbEventStore($client, $inputBuilder, $normalizer, 'table', aggregateConsistentReads: true);
 ```
 
-Global replay reads (`visitEvents`) are always eventually consistent — DynamoDB Global Secondary Indexes do not support strongly consistent reads.
+Global replay reads (`visitEvents`, `visitEventsAfterGlobalPosition`) are always eventually consistent — DynamoDB Global Secondary Indexes do not support strongly consistent reads.
 
 ## Core Components
 

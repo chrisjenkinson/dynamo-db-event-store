@@ -9,11 +9,11 @@ Each event row now has two additional attributes:
 - **`Feed`** (String) — always `'all'`; the hash key of the global replay index
 - **`GlobalPosition`** (Number) — a monotonically increasing counter assigned atomically at append time
 
-A Global Secondary Index (`Feed-GlobalPosition-index`) on `(Feed, GlobalPosition)` enables `visitEvents` to return events in the order they were committed.
+A Global Secondary Index (`Feed-GlobalPosition-index`) on `(Feed, GlobalPosition)` enables `visitEvents` to return events in the order they were committed and `visitEventsAfterGlobalPosition` to resume ordered replay from a checkpoint.
 
 A special counter item (`Id=_counter, Playhead=0`) is maintained in the same table to allocate `GlobalPosition` ranges atomically.
 
-Existing rows without `Feed` and `GlobalPosition` will not appear in the GSI and will therefore be skipped by `visitEvents`.
+Existing rows without `Feed` and `GlobalPosition` will not appear in the GSI and will therefore be skipped by `visitEvents` and `visitEventsAfterGlobalPosition`.
 
 ---
 
