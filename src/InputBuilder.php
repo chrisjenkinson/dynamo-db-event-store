@@ -16,9 +16,10 @@ use AsyncAws\DynamoDb\ValueObject\KeySchemaElement;
 
 final class InputBuilder
 {
-    public function buildQueryInput(string $tableName, string $id): QueryInput
+    public function buildQueryInput(string $tableName, string $id, bool $consistentRead = false): QueryInput
     {
         return new QueryInput([
+            'ConsistentRead'            => $consistentRead,
             'TableName'                 => $tableName,
             'KeyConditionExpression'    => 'Id = :id',
             'ExpressionAttributeValues' => [
@@ -29,9 +30,10 @@ final class InputBuilder
         ]);
     }
 
-    public function buildQueryWithPlayheadInput(string $tableName, string $id, int $playhead): QueryInput
+    public function buildQueryWithPlayheadInput(string $tableName, string $id, int $playhead, bool $consistentRead = false): QueryInput
     {
         return new QueryInput([
+            'ConsistentRead'            => $consistentRead,
             'TableName'                 => $tableName,
             'KeyConditionExpression'    => 'Id = :id AND Playhead >= :playhead',
             'ExpressionAttributeValues' => [

@@ -20,9 +20,9 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
     protected function createEventStore(): EventStoreManagement
     {
         $client = new DynamoDbClient(Configuration::create([
-            'endpoint'        => 'http://dynamodb-local:8000',
-            'accessKeyId'     => '',
-            'accessKeySecret' => '',
+            'endpoint'        => (string) getenv('DYNAMODB_ENDPOINT'),
+            'accessKeyId'     => (string) getenv('DYNAMODB_ACCESS_KEY_ID'),
+            'accessKeySecret' => (string) getenv('DYNAMODB_SECRET_ACCESS_KEY'),
         ]));
         $inputBuilder            = new InputBuilder();
         $domainMessageNormalizer = new DomainMessageNormalizer(new SimpleInterfaceSerializer(), new SimpleInterfaceSerializer(), new JsonEncoder(), new JsonDecoder());

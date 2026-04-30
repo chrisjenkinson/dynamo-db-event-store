@@ -8,8 +8,9 @@ use Broadway\Serializer\Serializable;
 
 final class TestEvent implements Serializable
 {
-    public function __construct(public readonly TestAggregateId $id)
-    {
+    public function __construct(
+        public readonly TestAggregateId $id
+    ) {
     }
 
     /**
