@@ -6,8 +6,8 @@ namespace chrisjenkinson\DynamoDbEventStore;
 
 use AsyncAws\DynamoDb\DynamoDbClient;
 use AsyncAws\DynamoDb\Exception\ConditionalCheckFailedException;
+use AsyncAws\DynamoDb\Exception\TransactionCanceledException;
 use Broadway\Domain\DomainEventStream;
-use Broadway\Domain\DomainMessage;
 use Broadway\EventStore\EventStreamNotFoundException;
 use Broadway\EventStore\EventVisitor;
 use Broadway\EventStore\Exception\DuplicatePlayheadException;
@@ -19,7 +19,9 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
         private readonly DynamoDbClient $client,
         private readonly InputBuilder $inputBuilder,
         private readonly DomainMessageNormalizer $domainMessageNormalizer,
-        private readonly string $table
+        private readonly string $table,
+        private readonly bool $aggregateConsistentReads = false,
+        private readonly int $replayPageSize = 1000
     ) {
     }
 
@@ -27,7 +29,7 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
     {
         $id = (string) $id;
 
-        $result = $this->client->query($this->inputBuilder->buildQueryInput($this->table, $id));
+        $result = $this->client->query($this->inputBuilder->buildQueryInput($this->table, $id, $this->aggregateConsistentReads));
 
         if (0 === $result->getCount()) {
             throw new EventStreamNotFoundException(sprintf('Event stream not found for aggregate with id "%s" in table "%s"', $id, $this->table));
@@ -46,7 +48,7 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
     {
         $id = (string) $id;
 
-        $result = $this->client->query($this->inputBuilder->buildQueryWithPlayheadInput($this->table, $id, $playhead));
+        $result = $this->client->query($this->inputBuilder->buildQueryWithPlayheadInput($this->table, $id, $playhead, $this->aggregateConsistentReads));
 
         $events = [];
 
@@ -67,11 +69,25 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
             return;
         }
 
+        $lastReservedPosition = (int) $this->client
+            ->updateItem($this->inputBuilder->buildReserveGlobalPositionsInput($this->table, count($events)))
+            ->getAttributes()['Value']
+            ->getN();
+
+        $firstPosition = $lastReservedPosition - count($events) + 1;
+
+        $transactItems = [];
+
+        foreach ($events as $index => $domainMessage) {
+            $normalized                   = $this->domainMessageNormalizer->normalize($domainMessage);
+            $normalized['globalPosition'] = $firstPosition + $index;
+            $normalized['feed']           = 'all';
+            $transactItems[]              = $this->inputBuilder->buildTransactPutItem($this->table, $normalized);
+        }
+
         try {
-            array_map(function (DomainMessage $domainMessage): void {
-                $this->client->putItem($this->inputBuilder->buildPutItemInput($this->table, $this->domainMessageNormalizer->normalize($domainMessage)));
-            }, $events);
-        } catch (ConditionalCheckFailedException $e) {
+            $this->client->transactWriteItems($this->inputBuilder->buildTransactWriteItemsInput($transactItems));
+        } catch (ConditionalCheckFailedException | TransactionCanceledException $e) {
             throw new DuplicatePlayheadException($eventStream, $e);
         }
     }
@@ -97,14 +113,42 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
 
     public function visitEvents(Criteria $criteria, EventVisitor $eventVisitor): void
     {
-        $result = $this->client->scan($this->inputBuilder->buildScanInput($this->table));
+        $checkpoint = 0;
 
-        foreach ($result->getItems() as $normalizedDomainMessage) {
-            $domainMessage = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
+        do {
+            $page = $this->loadReplayPageAfterGlobalPosition($criteria, $checkpoint, $this->replayPageSize);
+
+            foreach ($page->events() as $event) {
+                $eventVisitor->doWithEvent($event->message());
+            }
+
+            $checkpoint = $page->lastProcessedGlobalPosition();
+        } while ($page->hasMore());
+    }
+
+    public function loadReplayPageAfterGlobalPosition(Criteria $criteria, int $afterGlobalPosition, int $limit): ReplayPage
+    {
+        if ($limit < 1) {
+            throw new \InvalidArgumentException('Replay page limit must be at least 1.');
+        }
+
+        $lastProcessedGlobalPosition = $afterGlobalPosition;
+        $events                      = [];
+        $result                      = $this->client->query($this->inputBuilder->buildGlobalReplayInput($this->table, $afterGlobalPosition, $limit));
+
+        foreach ($result->getItems(true) as $normalizedDomainMessage) {
+            if ('_counter' === $normalizedDomainMessage['Id']->getS()) {
+                continue;
+            }
+
+            $lastProcessedGlobalPosition = (int) $normalizedDomainMessage['GlobalPosition']->getN();
+            $domainMessage               = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
 
             if ($criteria->isMatchedBy($domainMessage)) {
-                $eventVisitor->doWithEvent($domainMessage);
+                $events[] = new ReplayEvent($domainMessage, $lastProcessedGlobalPosition);
             }
         }
+
+        return new ReplayPage($events, $lastProcessedGlobalPosition, [] !== $result->getLastEvaluatedKey());
     }
 }

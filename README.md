@@ -62,7 +62,9 @@ $eventStore = new DynamoDbEventStore(
     $client,
     $inputBuilder,
     $normalizer,
-    'events-table' // DynamoDB table name
+    'events-table', // DynamoDB table name
+    aggregateConsistentReads: false, // set true for strongly consistent aggregate reads
+    replayPageSize: 1000 // batch size used internally by visitEvents()
 );
 
 // Create the table (if it doesn't exist)
@@ -76,6 +78,13 @@ The event store automatically creates a DynamoDB table with the following struct
 - **Partition Key**: `Id` (String) - The aggregate ID
 - **Sort Key**: `Playhead` (Number) - The event version number
 - **Billing Mode**: Pay-per-request
+
+Additional attributes written to each event row:
+
+- **Feed** (String) - Always `all`; used as the partition key of the global replay index
+- **GlobalPosition** (Number) - Monotonically increasing, assigned atomically at append time
+
+A Global Secondary Index (`Feed-GlobalPosition-index`) on `Feed` (HASH) + `GlobalPosition` (RANGE) enables ordered cross-aggregate replay.
 
 ### Usage
 
@@ -108,6 +117,41 @@ use Broadway\EventStore\Management\Criteria;
 
 $eventStore->visitEvents(new Criteria(), $eventVisitor);
 ```
+
+Events are visited in `GlobalPosition` order, so cross-aggregate replay reflects the exact interleaving in which events were appended.
+
+#### Load Replay Pages
+
+```php
+use Broadway\EventStore\Management\Criteria;
+
+$page = $eventStore->loadReplayPageAfterGlobalPosition(Criteria::create(), $checkpoint, 500);
+
+foreach ($page->events() as $event) {
+    $projector->apply($event->message());
+}
+
+$checkpoint = $page->lastProcessedGlobalPosition();
+$hasMore    = $page->hasMore();
+```
+
+`$limit` bounds examined replay rows, not emitted events. `lastProcessedGlobalPosition()` advances across filtered rows, and `hasMore()` reflects DynamoDB continuation state for the bounded query.
+
+## Replay Ordering
+
+Aggregate streams are ordered by `Playhead`. Cross-aggregate replay (`visitEvents`, `loadReplayPageAfterGlobalPosition`) uses `GlobalPosition`, assigned atomically per append batch and stored in a DynamoDB Global Secondary Index. Events are always visited in the order they were committed, regardless of aggregate ID.
+
+## Read Consistency
+
+Aggregate stream reads (`load`, `loadFromPlayhead`) use eventually consistent reads by default. Pass `aggregateConsistentReads: true` to the constructor for strongly consistent aggregate reads:
+
+```php
+$eventStore = new DynamoDbEventStore($client, $inputBuilder, $normalizer, 'table', aggregateConsistentReads: true);
+```
+
+Global replay reads (`visitEvents`, `loadReplayPageAfterGlobalPosition`) are always eventually consistent — DynamoDB Global Secondary Indexes do not support strongly consistent reads.
+
+`visitEvents()` drains replay pages using a constructor-configurable `replayPageSize`, which defaults to `1000`.
 
 ## Core Components
 

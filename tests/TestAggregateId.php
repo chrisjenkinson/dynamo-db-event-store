@@ -6,8 +6,9 @@ namespace chrisjenkinson\DynamoDbEventStore\Tests;
 
 final class TestAggregateId
 {
-    public function __construct(public readonly string $id)
-    {
+    public function __construct(
+        public readonly string $id
+    ) {
     }
 
     public function __toString(): string
