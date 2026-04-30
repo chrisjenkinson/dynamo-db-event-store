@@ -206,17 +206,27 @@ final class InputBuilder
         ]);
     }
 
-    public function buildGlobalReplayInput(string $tableName): QueryInput
+    public function buildGlobalReplayInput(string $tableName, ?int $afterGlobalPosition = null): QueryInput
     {
+        $keyCondition              = 'Feed = :feed';
+        $expressionAttributeValues = [
+            ':feed' => new AttributeValue([
+                'S' => 'all',
+            ]),
+        ];
+
+        if (null !== $afterGlobalPosition) {
+            $keyCondition .= ' AND GlobalPosition > :globalPosition';
+            $expressionAttributeValues[':globalPosition'] = new AttributeValue([
+                'N' => (string) $afterGlobalPosition,
+            ]);
+        }
+
         return new QueryInput([
             'TableName'                 => $tableName,
             'IndexName'                 => 'Feed-GlobalPosition-index',
-            'KeyConditionExpression'    => 'Feed = :feed',
-            'ExpressionAttributeValues' => [
-                ':feed' => new AttributeValue([
-                    'S' => 'all',
-                ]),
-            ],
+            'KeyConditionExpression'    => $keyCondition,
+            'ExpressionAttributeValues' => $expressionAttributeValues,
         ]);
     }
 

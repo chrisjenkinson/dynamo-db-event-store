@@ -57,6 +57,15 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
         self::assertSame($aggregateIdA, $lastTwo[1]->getId());
     }
 
+    public function test_it_can_query_replay_events_after_a_checkpoint(): void
+    {
+        $inputBuilder = new InputBuilder();
+        $input        = $inputBuilder->buildGlobalReplayInput('table', 7);
+
+        self::assertSame('Feed = :feed AND GlobalPosition > :globalPosition', $input->getKeyConditionExpression());
+        self::assertSame('7', $input->getExpressionAttributeValues()[':globalPosition']->getN());
+    }
+
     public function test_it_creates_a_global_position_index_for_replay(): void
     {
         $inputBuilder = new InputBuilder();
