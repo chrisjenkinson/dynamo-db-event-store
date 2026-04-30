@@ -20,7 +20,8 @@ jobs:
     strategy:
       matrix:
         php-versions: ['8.1', '8.2', '8.3']
-    env: 
+    env:
+      DYNAMODB_ENDPOINT: 'http://dynamodb-local:8000'
       AWS_ACCESS_KEY_ID: 'none'
       AWS_SECRET_ACCESS_KEY: 'none'
     steps:
