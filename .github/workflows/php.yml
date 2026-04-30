@@ -9,17 +9,18 @@ permissions:
 
 jobs:
   build:
-    name: PHP ${{ matrix.php-versions }}
+    name: PHP ${{ matrix.php-version }}
     runs-on: ubuntu-latest
     container: ubuntu:latest
     services:
       dynamodb-local:
-        image: amazon/dynamodb-local:1.22.0
+        image: amazon/dynamodb-local:3.3.0
         ports:
           - 8000:8000/tcp
     strategy:
+      fail-fast: false
       matrix:
-        php-versions: ['8.1', '8.2', '8.3']
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
     env:
       DYNAMODB_ENDPOINT: 'http://dynamodb-local:8000'
       AWS_ACCESS_KEY_ID: 'none'
@@ -35,7 +36,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php-versions }}
+          php-version: ${{ matrix.php-version }}
           tools: composer
           coverage: xdebug
 
