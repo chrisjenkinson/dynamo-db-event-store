@@ -6,6 +6,7 @@ namespace chrisjenkinson\DynamoDbEventStore\Tests;
 
 use AsyncAws\Core\Configuration;
 use AsyncAws\DynamoDb\DynamoDbClient;
+use AsyncAws\DynamoDb\Exception\TransactionCanceledException;
 use AsyncAws\DynamoDb\Input\TransactWriteItemsInput;
 use AsyncAws\DynamoDb\Result\TransactWriteItemsOutput;
 use AsyncAws\DynamoDb\Result\UpdateItemOutput;
@@ -14,6 +15,7 @@ use Broadway\Domain\DomainEventStream;
 use Broadway\Domain\DomainMessage;
 use Broadway\Domain\Metadata;
 use Broadway\EventStore\EventStreamNotFoundException;
+use Broadway\EventStore\Exception\DuplicatePlayheadException;
 use Broadway\EventStore\Testing\EventStoreTest;
 use Broadway\Serializer\SimpleInterfaceSerializer;
 use chrisjenkinson\DynamoDbEventStore\DomainMessageNormalizer;
@@ -76,6 +78,30 @@ final class DynamoDbEventStoreTest extends EventStoreTest
         self::assertSame('all', $firstPut->getItem()['Feed']->getS());
         self::assertSame('0', $firstPut->getItem()['GlobalPosition']->getN());
         self::assertSame('1', $secondPut->getItem()['GlobalPosition']->getN());
+    }
+
+    public function test_it_translates_transaction_conflicts_to_duplicate_playhead(): void
+    {
+        $updateOutput = $this->createStub(UpdateItemOutput::class);
+        $updateOutput->method('getAttributes')->willReturn([
+            'Value' => new AttributeValue([
+                'N' => '0',
+            ]),
+        ]);
+
+        $client = $this->createStub(DynamoDbClient::class);
+        $client->method('updateItem')->willReturn($updateOutput);
+        /** @var TransactionCanceledException $transactionException */
+        $transactionException = (new \ReflectionClass(TransactionCanceledException::class))->newInstanceWithoutConstructor();
+        $client->method('transactWriteItems')->willThrowException($transactionException);
+
+        $eventStore = $this->createEventStoreWithClient($client);
+
+        $this->expectException(DuplicatePlayheadException::class);
+
+        $eventStore->append($this->aggregateId, new DomainEventStream([
+            $this->buildDomainMessage(0),
+        ]));
     }
 
     protected function setUp(): void
