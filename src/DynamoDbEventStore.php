@@ -112,14 +112,26 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
 
     public function visitEvents(Criteria $criteria, EventVisitor $eventVisitor): void
     {
-        $result = $this->client->query($this->inputBuilder->buildGlobalReplayInput($this->table));
+        $this->visitEventsAfterGlobalPosition($criteria, 0, $eventVisitor);
+    }
+
+    public function visitEventsAfterGlobalPosition(Criteria $criteria, int $afterGlobalPosition, EventVisitor $eventVisitor): int
+    {
+        $lastProcessedGlobalPosition = $afterGlobalPosition;
+        $result                      = $this->client->query($this->inputBuilder->buildGlobalReplayInput($this->table, $afterGlobalPosition));
 
         foreach ($result->getItems() as $normalizedDomainMessage) {
-            $domainMessage = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
+            if ('_counter' === $normalizedDomainMessage['Id']->getS()) {
+                continue;
+            }
 
+            $lastProcessedGlobalPosition = (int) $normalizedDomainMessage['GlobalPosition']->getN();
+            $domainMessage               = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
             if ($criteria->isMatchedBy($domainMessage)) {
                 $eventVisitor->doWithEvent($domainMessage);
             }
         }
+
+        return $lastProcessedGlobalPosition;
     }
 }

@@ -223,6 +223,7 @@ final class InputBuilder
         }
 
         return new QueryInput([
+            'ConsistentRead'            => false,
             'TableName'                 => $tableName,
             'IndexName'                 => 'Feed-GlobalPosition-index',
             'KeyConditionExpression'    => $keyCondition,
