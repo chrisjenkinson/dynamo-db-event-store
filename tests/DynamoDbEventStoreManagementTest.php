@@ -17,6 +17,15 @@ use chrisjenkinson\DynamoDbEventStore\JsonEncoder;
 
 final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
 {
+    public function test_it_creates_a_global_position_index_for_replay(): void
+    {
+        $inputBuilder = new InputBuilder();
+        $input        = $inputBuilder->buildCreateTableInput('table');
+
+        self::assertSame('Feed', $input->getGlobalSecondaryIndexes()[0]->getKeySchema()[0]->getAttributeName());
+        self::assertSame('GlobalPosition', $input->getGlobalSecondaryIndexes()[0]->getKeySchema()[1]->getAttributeName());
+    }
+
     protected function createEventStore(): EventStoreManagement
     {
         $client = new DynamoDbClient(Configuration::create([

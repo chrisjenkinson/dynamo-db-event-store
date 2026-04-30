@@ -12,7 +12,9 @@ use AsyncAws\DynamoDb\Input\QueryInput;
 use AsyncAws\DynamoDb\Input\ScanInput;
 use AsyncAws\DynamoDb\ValueObject\AttributeDefinition;
 use AsyncAws\DynamoDb\ValueObject\AttributeValue;
+use AsyncAws\DynamoDb\ValueObject\GlobalSecondaryIndex;
 use AsyncAws\DynamoDb\ValueObject\KeySchemaElement;
+use AsyncAws\DynamoDb\ValueObject\Projection;
 
 final class InputBuilder
 {
@@ -81,6 +83,14 @@ final class InputBuilder
                     'AttributeName' => 'Playhead',
                     'AttributeType' => 'N',
                 ]),
+                new AttributeDefinition([
+                    'AttributeName' => 'Feed',
+                    'AttributeType' => 'S',
+                ]),
+                new AttributeDefinition([
+                    'AttributeName' => 'GlobalPosition',
+                    'AttributeType' => 'N',
+                ]),
             ],
             'BillingMode' => 'PAY_PER_REQUEST',
             'KeySchema'   => [
@@ -91,6 +101,24 @@ final class InputBuilder
                 new KeySchemaElement([
                     'AttributeName' => 'Playhead',
                     'KeyType'       => 'RANGE',
+                ]),
+            ],
+            'GlobalSecondaryIndexes' => [
+                new GlobalSecondaryIndex([
+                    'IndexName' => 'Feed-GlobalPosition-index',
+                    'KeySchema' => [
+                        new KeySchemaElement([
+                            'AttributeName' => 'Feed',
+                            'KeyType'       => 'HASH',
+                        ]),
+                        new KeySchemaElement([
+                            'AttributeName' => 'GlobalPosition',
+                            'KeyType'       => 'RANGE',
+                        ]),
+                    ],
+                    'Projection' => new Projection([
+                        'ProjectionType' => 'ALL',
+                    ]),
                 ]),
             ],
         ]);
