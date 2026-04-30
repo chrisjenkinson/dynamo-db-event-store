@@ -15,7 +15,7 @@ jobs:
     continue-on-error: ${{ matrix.experimental }}
     services:
       dynamodb-local:
-        image: amazon/dynamodb-local:1.22.0
+        image: amazon/dynamodb-local:3.3.0
         ports:
           - 8000:8000/tcp
     strategy:
