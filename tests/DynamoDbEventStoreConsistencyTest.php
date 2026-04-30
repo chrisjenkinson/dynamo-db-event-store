@@ -8,7 +8,9 @@ use AsyncAws\DynamoDb\DynamoDbClient;
 use AsyncAws\DynamoDb\Input\QueryInput;
 use AsyncAws\DynamoDb\Result\QueryOutput;
 use AsyncAws\DynamoDb\ValueObject\AttributeValue;
+use Broadway\Domain\DomainMessage;
 use Broadway\EventStore\EventStreamNotFoundException;
+use Broadway\EventStore\EventVisitor;
 use Broadway\EventStore\Management\Criteria;
 use Broadway\Serializer\SimpleInterfaceSerializer;
 use chrisjenkinson\DynamoDbEventStore\DomainMessageNormalizer;
@@ -154,14 +156,33 @@ final class DynamoDbEventStoreConsistencyTest extends TestCase
         self::assertTrue($page->hasMore());
     }
 
-    private function createEventStore(DynamoDbClient $client, bool $aggregateConsistentReads = false): DynamoDbEventStore
+    public function test_it_uses_the_configured_replay_page_size_when_visiting_events(): void
+    {
+        $capturedInput = null;
+        $eventStore    = $this->createEventStore($this->createQueryRecordingClient($capturedInput), replayPageSize: 25);
+
+        $eventStore->visitEvents(
+            Criteria::create(),
+            new class() implements EventVisitor {
+                public function doWithEvent(DomainMessage $domainMessage): void
+                {
+                }
+            }
+        );
+
+        self::assertInstanceOf(QueryInput::class, $capturedInput);
+        self::assertSame(25, $capturedInput->getLimit());
+    }
+
+    private function createEventStore(DynamoDbClient $client, bool $aggregateConsistentReads = false, int $replayPageSize = 1000): DynamoDbEventStore
     {
         return new DynamoDbEventStore(
             $client,
             new InputBuilder(),
             new DomainMessageNormalizer(new SimpleInterfaceSerializer(), new SimpleInterfaceSerializer(), new JsonEncoder(), new JsonDecoder()),
             'table',
-            $aggregateConsistentReads
+            $aggregateConsistentReads,
+            $replayPageSize
         );
     }
 

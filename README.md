@@ -63,7 +63,8 @@ $eventStore = new DynamoDbEventStore(
     $inputBuilder,
     $normalizer,
     'events-table', // DynamoDB table name
-    aggregateConsistentReads: false // set true for strongly consistent aggregate reads
+    aggregateConsistentReads: false, // set true for strongly consistent aggregate reads
+    replayPageSize: 1000 // batch size used internally by visitEvents()
 );
 
 // Create the table (if it doesn't exist)
@@ -149,6 +150,8 @@ $eventStore = new DynamoDbEventStore($client, $inputBuilder, $normalizer, 'table
 ```
 
 Global replay reads (`visitEvents`, `loadReplayPageAfterGlobalPosition`) are always eventually consistent — DynamoDB Global Secondary Indexes do not support strongly consistent reads.
+
+`visitEvents()` drains replay pages using a constructor-configurable `replayPageSize`, which defaults to `1000`.
 
 ## Core Components
 

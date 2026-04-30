@@ -20,7 +20,8 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
         private readonly InputBuilder $inputBuilder,
         private readonly DomainMessageNormalizer $domainMessageNormalizer,
         private readonly string $table,
-        private readonly bool $aggregateConsistentReads = false
+        private readonly bool $aggregateConsistentReads = false,
+        private readonly int $replayPageSize = 1000
     ) {
     }
 
@@ -115,7 +116,7 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
         $checkpoint = 0;
 
         do {
-            $page = $this->loadReplayPageAfterGlobalPosition($criteria, $checkpoint, 1000);
+            $page = $this->loadReplayPageAfterGlobalPosition($criteria, $checkpoint, $this->replayPageSize);
 
             foreach ($page->events() as $event) {
                 $eventVisitor->doWithEvent($event->message());
