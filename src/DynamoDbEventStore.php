@@ -6,8 +6,8 @@ namespace chrisjenkinson\DynamoDbEventStore;
 
 use AsyncAws\DynamoDb\DynamoDbClient;
 use AsyncAws\DynamoDb\Exception\ConditionalCheckFailedException;
+use AsyncAws\DynamoDb\Exception\TransactionCanceledException;
 use Broadway\Domain\DomainEventStream;
-use Broadway\Domain\DomainMessage;
 use Broadway\EventStore\EventStreamNotFoundException;
 use Broadway\EventStore\EventVisitor;
 use Broadway\EventStore\Exception\DuplicatePlayheadException;
@@ -68,11 +68,25 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
             return;
         }
 
+        $lastReservedPosition = (int) $this->client
+            ->updateItem($this->inputBuilder->buildReserveGlobalPositionsInput($this->table, count($events)))
+            ->getAttributes()['Value']
+            ->getN();
+
+        $firstPosition = $lastReservedPosition - count($events) + 1;
+
+        $transactItems = [];
+
+        foreach ($events as $index => $domainMessage) {
+            $normalized                   = $this->domainMessageNormalizer->normalize($domainMessage);
+            $normalized['globalPosition'] = $firstPosition + $index;
+            $normalized['feed']           = 'all';
+            $transactItems[]              = $this->inputBuilder->buildTransactPutItem($this->table, $normalized);
+        }
+
         try {
-            array_map(function (DomainMessage $domainMessage): void {
-                $this->client->putItem($this->inputBuilder->buildPutItemInput($this->table, $this->domainMessageNormalizer->normalize($domainMessage)));
-            }, $events);
-        } catch (ConditionalCheckFailedException $e) {
+            $this->client->transactWriteItems($this->inputBuilder->buildTransactWriteItemsInput($transactItems));
+        } catch (ConditionalCheckFailedException | TransactionCanceledException $e) {
             throw new DuplicatePlayheadException($eventStream, $e);
         }
     }
@@ -101,6 +115,10 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
         $result = $this->client->scan($this->inputBuilder->buildScanInput($this->table));
 
         foreach ($result->getItems() as $normalizedDomainMessage) {
+            if (!isset($normalizedDomainMessage['Metadata'])) {
+                continue;
+            }
+
             $domainMessage = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
 
             if ($criteria->isMatchedBy($domainMessage)) {

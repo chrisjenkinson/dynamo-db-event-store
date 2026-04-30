@@ -10,11 +10,15 @@ use AsyncAws\DynamoDb\Input\DescribeTableInput;
 use AsyncAws\DynamoDb\Input\PutItemInput;
 use AsyncAws\DynamoDb\Input\QueryInput;
 use AsyncAws\DynamoDb\Input\ScanInput;
+use AsyncAws\DynamoDb\Input\TransactWriteItemsInput;
+use AsyncAws\DynamoDb\Input\UpdateItemInput;
 use AsyncAws\DynamoDb\ValueObject\AttributeDefinition;
 use AsyncAws\DynamoDb\ValueObject\AttributeValue;
 use AsyncAws\DynamoDb\ValueObject\GlobalSecondaryIndex;
 use AsyncAws\DynamoDb\ValueObject\KeySchemaElement;
 use AsyncAws\DynamoDb\ValueObject\Projection;
+use AsyncAws\DynamoDb\ValueObject\Put;
+use AsyncAws\DynamoDb\ValueObject\TransactWriteItem;
 
 final class InputBuilder
 {
@@ -121,6 +125,94 @@ final class InputBuilder
                     ]),
                 ]),
             ],
+        ]);
+    }
+
+    public function buildReserveGlobalPositionsInput(string $tableName, int $count): UpdateItemInput
+    {
+        return new UpdateItemInput([
+            'TableName' => $tableName,
+            'Key'       => [
+                'Id' => new AttributeValue([
+                    'S' => '_counter',
+                ]),
+                'Playhead' => new AttributeValue([
+                    'N' => '0',
+                ]),
+            ],
+            'UpdateExpression'         => 'ADD #v :inc',
+            'ExpressionAttributeNames' => [
+                '#v' => 'Value',
+            ],
+            'ExpressionAttributeValues' => [
+                ':inc' => new AttributeValue([
+                    'N' => (string) $count,
+                ]),
+            ],
+            'ReturnValues' => 'UPDATED_NEW',
+        ]);
+    }
+
+    /**
+     * @param array{id: string, playhead: int, metadataClass: string, metadataPayload: string, payloadClass: string, payloadPayload: string, recordedOn: string, type: string, globalPosition: int, feed: string} $normalizedDomainMessage
+     */
+    public function buildTransactPutItem(string $tableName, array $normalizedDomainMessage): TransactWriteItem
+    {
+        return new TransactWriteItem([
+            'Put' => new Put([
+                'TableName'           => $tableName,
+                'ConditionExpression' => 'attribute_not_exists(Id)',
+                'Item'                => [
+                    'Id' => new AttributeValue([
+                        'S' => $normalizedDomainMessage['id'],
+                    ]),
+                    'Playhead' => new AttributeValue([
+                        'N' => (string) $normalizedDomainMessage['playhead'],
+                    ]),
+                    'Feed' => new AttributeValue([
+                        'S' => $normalizedDomainMessage['feed'],
+                    ]),
+                    'GlobalPosition' => new AttributeValue([
+                        'N' => (string) $normalizedDomainMessage['globalPosition'],
+                    ]),
+                    'Metadata' => new AttributeValue([
+                        'M' => [
+                            'Class' => new AttributeValue([
+                                'S' => $normalizedDomainMessage['metadataClass'],
+                            ]),
+                            'Payload' => new AttributeValue([
+                                'S' => $normalizedDomainMessage['metadataPayload'],
+                            ]),
+                        ],
+                    ]),
+                    'Payload' => new AttributeValue([
+                        'M' => [
+                            'Class' => new AttributeValue([
+                                'S' => $normalizedDomainMessage['payloadClass'],
+                            ]),
+                            'Payload' => new AttributeValue([
+                                'S' => $normalizedDomainMessage['payloadPayload'],
+                            ]),
+                        ],
+                    ]),
+                    'RecordedOn' => new AttributeValue([
+                        'S' => $normalizedDomainMessage['recordedOn'],
+                    ]),
+                    'Type' => new AttributeValue([
+                        'S' => $normalizedDomainMessage['type'],
+                    ]),
+                ],
+            ]),
+        ]);
+    }
+
+    /**
+     * @param TransactWriteItem[] $items
+     */
+    public function buildTransactWriteItemsInput(array $items): TransactWriteItemsInput
+    {
+        return new TransactWriteItemsInput([
+            'TransactItems' => $items,
         ]);
     }
 
