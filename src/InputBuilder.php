@@ -206,6 +206,20 @@ final class InputBuilder
         ]);
     }
 
+    public function buildGlobalReplayInput(string $tableName): QueryInput
+    {
+        return new QueryInput([
+            'TableName'                 => $tableName,
+            'IndexName'                 => 'Feed-GlobalPosition-index',
+            'KeyConditionExpression'    => 'Feed = :feed',
+            'ExpressionAttributeValues' => [
+                ':feed' => new AttributeValue([
+                    'S' => 'all',
+                ]),
+            ],
+        ]);
+    }
+
     /**
      * @param TransactWriteItem[] $items
      */

@@ -112,13 +112,9 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
 
     public function visitEvents(Criteria $criteria, EventVisitor $eventVisitor): void
     {
-        $result = $this->client->scan($this->inputBuilder->buildScanInput($this->table));
+        $result = $this->client->query($this->inputBuilder->buildGlobalReplayInput($this->table));
 
         foreach ($result->getItems() as $normalizedDomainMessage) {
-            if (!isset($normalizedDomainMessage['Metadata'])) {
-                continue;
-            }
-
             $domainMessage = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
 
             if ($criteria->isMatchedBy($domainMessage)) {
