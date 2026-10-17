@@ -17,7 +17,7 @@ This library provides a Broadway-compatible event store backed by AWS DynamoDB, 
 
 ## Requirements
 
-- PHP 8.1 or higher
+- PHP 8.1 or higher within PHP 8.x (`^8.1` in Composer)
 - Broadway 2.4.0 or later
 - Async AWS DynamoDB client (1.3.0+ or 3.0.0+)
 
