@@ -135,7 +135,7 @@ $checkpoint = $page->lastProcessedGlobalPosition();
 $hasMore    = $page->hasMore();
 ```
 
-`$limit` bounds examined replay rows, not emitted events. `lastProcessedGlobalPosition()` advances across filtered rows, and `hasMore()` reflects DynamoDB continuation state for the bounded query.
+`$limit` is a bound on examined replay rows, not emitted events. When callers supply event-type criteria without aggregate-root criteria, we filter stored `Type` metadata before payload deserialization. We do not deserialize known nonmatching event types. We still fully deserialize matching events and propagate malformed-payload errors. The checkpoint is after every examined row, including pages with no emitted events; DynamoDB continuation state is available through `hasMore()`.
 
 ## Replay Ordering
 

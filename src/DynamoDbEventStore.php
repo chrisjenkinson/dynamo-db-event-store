@@ -135,6 +135,8 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
         $lastProcessedGlobalPosition = $afterGlobalPosition;
         $events                      = [];
         $result                      = $this->client->query($this->inputBuilder->buildGlobalReplayInput($this->table, $afterGlobalPosition, $limit));
+        $eventTypes                  = $criteria->getEventTypes();
+        $prefilterByEventType        = [] !== $eventTypes && [] === $criteria->getAggregateRootTypes();
 
         foreach ($result->getItems(true) as $normalizedDomainMessage) {
             if ('_counter' === $normalizedDomainMessage['Id']->getS()) {
@@ -142,7 +144,16 @@ final class DynamoDbEventStore implements DynamoDbEventStoreInterface
             }
 
             $lastProcessedGlobalPosition = (int) $normalizedDomainMessage['GlobalPosition']->getN();
-            $domainMessage               = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
+
+            if ($prefilterByEventType && isset($normalizedDomainMessage['Type'])) {
+                $rawType = $normalizedDomainMessage['Type']->getS();
+
+                if (is_string($rawType) && '' !== $rawType && !in_array($rawType, $eventTypes)) {
+                    continue;
+                }
+            }
+
+            $domainMessage = $this->domainMessageNormalizer->denormalize($normalizedDomainMessage);
 
             if ($criteria->isMatchedBy($domainMessage)) {
                 $events[] = new ReplayEvent($domainMessage, $lastProcessedGlobalPosition);

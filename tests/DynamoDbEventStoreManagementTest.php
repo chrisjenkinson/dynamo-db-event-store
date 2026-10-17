@@ -6,6 +6,7 @@ namespace chrisjenkinson\DynamoDbEventStore\Tests;
 
 use AsyncAws\Core\Configuration;
 use AsyncAws\DynamoDb\DynamoDbClient;
+use AsyncAws\DynamoDb\ValueObject\AttributeValue;
 use Broadway\Domain\DomainEventStream;
 use Broadway\Domain\DomainMessage;
 use Broadway\Domain\Metadata;
@@ -24,6 +25,7 @@ use chrisjenkinson\DynamoDbEventStore\JsonEncoder;
 final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
 {
     private DynamoDbEventStore $dynamoEventStore;
+    private DynamoDbClient $client;
 
     public function test_it_queries_events_by_global_position_for_replay(): void
     {
@@ -166,6 +168,97 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
         self::assertSame($aggregateIdA, $lastTwo[1]->getId());
     }
 
+    public function test_it_filters_retired_event_types_before_deserialization_and_advances_pages(): void
+    {
+        $aggregateId = 'retired-events';
+
+        $this->dynamoEventStore->append($aggregateId, new DomainEventStream([
+            DomainMessage::recordNow($aggregateId, 0, new Metadata([]), new Start()),
+            DomainMessage::recordNow($aggregateId, 1, new Metadata([]), new Start()),
+            DomainMessage::recordNow($aggregateId, 2, new Metadata([]), new Start()),
+        ]));
+
+        $this->retireStoredEvent($aggregateId, 0);
+        $this->retireStoredEvent($aggregateId, 1);
+
+        $criteria = Criteria::create()->withEventTypes([
+            'Broadway.EventStore.Management.Testing.Start',
+        ]);
+        $page = $this->dynamoEventStore->loadReplayPageAfterGlobalPosition($criteria, 24, 2);
+
+        self::assertCount(0, $page->events());
+        self::assertSame(26, $page->lastProcessedGlobalPosition());
+        self::assertTrue($page->hasMore());
+
+        $nextPage = $this->dynamoEventStore->loadReplayPageAfterGlobalPosition($criteria, $page->lastProcessedGlobalPosition(), 2);
+
+        self::assertCount(1, $nextPage->events());
+        self::assertSame(27, $nextPage->events()[0]->globalPosition());
+
+        $visitor = new RecordingEventVisitor();
+        $this->dynamoEventStore->visitEvents($criteria, $visitor);
+        $visitedEvents = $visitor->getVisitedEvents();
+
+        self::assertSame($aggregateId, end($visitedEvents)->getId());
+        self::assertSame(2, end($visitedEvents)->getPlayhead());
+    }
+
+    public function test_it_does_not_skip_malformed_payloads_for_matching_event_types(): void
+    {
+        $aggregateId = 'malformed-matching-event';
+
+        $this->dynamoEventStore->append($aggregateId, new DomainEventStream([
+            DomainMessage::recordNow($aggregateId, 0, new Metadata([]), new Start()),
+        ]));
+
+        $this->client->updateItem([
+            'TableName' => 'table',
+            'Key'       => [
+                'Id'       => new AttributeValue(['S' => $aggregateId]),
+                'Playhead' => new AttributeValue(['N' => '0']),
+            ],
+            'UpdateExpression'          => 'SET #payload.#payloadPayload = :payload',
+            'ExpressionAttributeNames' => [
+                '#payload'        => 'Payload',
+                '#payloadPayload' => 'Payload',
+            ],
+            'ExpressionAttributeValues' => [
+                ':payload' => new AttributeValue(['S' => '{']),
+            ],
+        ])->resolve();
+
+        $this->expectException(\JsonException::class);
+
+        $this->dynamoEventStore->loadReplayPageAfterGlobalPosition(
+            Criteria::create()->withEventTypes([
+                'Broadway.EventStore.Management.Testing.Start',
+            ]),
+            24,
+            2
+        );
+    }
+
+    private function retireStoredEvent(string $aggregateId, int $playhead): void
+    {
+        $this->client->updateItem([
+            'TableName' => 'table',
+            'Key'       => [
+                'Id'       => new AttributeValue(['S' => $aggregateId]),
+                'Playhead' => new AttributeValue(['N' => (string) $playhead]),
+            ],
+            'UpdateExpression'          => 'SET #type = :type, #payload.#payloadClass = :class',
+            'ExpressionAttributeNames' => [
+                '#type'         => 'Type',
+                '#payload'      => 'Payload',
+                '#payloadClass' => 'Class',
+            ],
+            'ExpressionAttributeValues' => [
+                ':type'  => new AttributeValue(['S' => 'Retired.UnknownEvent']),
+                ':class' => new AttributeValue(['S' => 'Retired\\UnknownEvent']),
+            ],
+        ])->resolve();
+    }
+
     public function test_it_creates_a_global_position_index_for_replay(): void
     {
         $inputBuilder = new InputBuilder();
@@ -185,11 +278,12 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
         $inputBuilder            = new InputBuilder();
         $domainMessageNormalizer = new DomainMessageNormalizer(new SimpleInterfaceSerializer(), new SimpleInterfaceSerializer(), new JsonEncoder(), new JsonDecoder());
 
-        $eventStore = new DynamoDbEventStore($client, $inputBuilder, $domainMessageNormalizer, 'table');
+        $eventStore = new DynamoDbEventStore($client, $inputBuilder, $domainMessageNormalizer, 'table', replayPageSize: 2);
 
         $eventStore->deleteTable();
         $eventStore->createTable();
 
+        $this->client           = $client;
         $this->dynamoEventStore = $eventStore;
 
         return $eventStore;
