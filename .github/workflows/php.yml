@@ -60,3 +60,38 @@ jobs:
 
       - name: Run phpstan
         run: composer run-script phpstan
+
+  mutation:
+    name: Mutation testing (PHP 8.3)
+    runs-on: ubuntu-latest
+    container: ubuntu:latest
+    services:
+      dynamodb-local:
+        image: amazon/dynamodb-local:3.3.0
+        ports:
+          - 8000:8000/tcp
+    env:
+      DYNAMODB_ENDPOINT: 'http://dynamodb-local:8000'
+      AWS_ACCESS_KEY_ID: 'none'
+      AWS_SECRET_ACCESS_KEY: 'none'
+      XDEBUG_MODE: coverage
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install git
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends git
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+          coverage: xdebug
+
+      - name: Install dependencies with Infection 0.35
+        run: composer update --with 'infection/infection:^0.35.0' --prefer-dist --no-progress --no-interaction
+
+      - name: Run Infection
+        run: composer run-script infection -- --threads=1

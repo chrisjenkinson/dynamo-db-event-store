@@ -174,6 +174,14 @@ composer run phpstan          # Static analysis
 composer run infection        # Mutation testing
 ```
 
+### Continuous Integration
+
+We run PHPUnit and PHPStan on PHP 8.1 through 8.5. We run mutation testing separately on PHP 8.3, with Xdebug and DynamoDB Local, and explicitly resolve Infection from the `^0.35.0` release series.
+
+Infection remains a development dependency. We retain older version alternatives so contributors can install development dependencies on PHP 8.1 and 8.2. Consumers of this library do not install its development dependencies.
+
+The mutation job runs `composer run-script infection -- --threads=1`. We use one worker because the integration tests recreate a shared DynamoDB table. We record the mutation results in the CI log without enforcing a minimum mutation score.
+
 ## Development
 
 ### Code Quality
