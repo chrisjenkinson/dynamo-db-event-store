@@ -168,9 +168,9 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
         self::assertSame($aggregateIdA, $lastTwo[1]->getId());
     }
 
-    public function test_it_filters_retired_event_types_before_deserialization_and_advances_pages(): void
+    public function test_it_skips_deserialization_for_excluded_event_types_and_advances_pages(): void
     {
-        $aggregateId = 'retired-events';
+        $aggregateId = 'excluded-events';
 
         $this->dynamoEventStore->append($aggregateId, new DomainEventStream([
             DomainMessage::recordNow($aggregateId, 0, new Metadata([]), new Start()),
@@ -178,8 +178,8 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
             DomainMessage::recordNow($aggregateId, 2, new Metadata([]), new Start()),
         ]));
 
-        $this->retireStoredEvent($aggregateId, 0);
-        $this->retireStoredEvent($aggregateId, 1);
+        $this->makeStoredEventUndeserializable($aggregateId, 0);
+        $this->makeStoredEventUndeserializable($aggregateId, 1);
 
         $criteria = Criteria::create()->withEventTypes([
             'Broadway.EventStore.Management.Testing.Start',
@@ -238,7 +238,7 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
         );
     }
 
-    private function retireStoredEvent(string $aggregateId, int $playhead): void
+    private function makeStoredEventUndeserializable(string $aggregateId, int $playhead): void
     {
         $this->client->updateItem([
             'TableName' => 'table',
@@ -253,8 +253,8 @@ final class DynamoDbEventStoreManagementTest extends EventStoreManagementTest
                 '#payloadClass' => 'Class',
             ],
             'ExpressionAttributeValues' => [
-                ':type'  => new AttributeValue(['S' => 'Retired.UnknownEvent']),
-                ':class' => new AttributeValue(['S' => 'Retired\\UnknownEvent']),
+                ':type'  => new AttributeValue(['S' => 'Excluded.UnknownEvent']),
+                ':class' => new AttributeValue(['S' => 'Excluded\\UnknownEvent']),
             ],
         ])->resolve();
     }
