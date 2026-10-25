@@ -82,7 +82,7 @@ The event store automatically creates a DynamoDB table with the following struct
 Additional attributes written to each event row:
 
 - **Feed** (String) - Always `all`; used as the partition key of the global replay index
-- **GlobalPosition** (Number) - Monotonically increasing, assigned atomically at append time
+- **GlobalPosition** (Number) - Reserved atomically before the event batch is committed; failed writes can leave gaps
 
 A Global Secondary Index (`Feed-GlobalPosition-index`) on `Feed` (HASH) + `GlobalPosition` (RANGE) enables ordered cross-aggregate replay.
 
@@ -118,7 +118,7 @@ use Broadway\EventStore\Management\Criteria;
 $eventStore->visitEvents(new Criteria(), $eventVisitor);
 ```
 
-Events are visited in `GlobalPosition` order, so cross-aggregate replay reflects the exact interleaving in which events were appended.
+Events are visited in `GlobalPosition` reservation order. A failed append may leave gaps, and reservation order does not guarantee transaction commit order.
 
 #### Load Replay Pages
 
@@ -139,7 +139,7 @@ $hasMore    = $page->hasMore();
 
 ## Replay Ordering
 
-Aggregate streams are ordered by `Playhead`. Cross-aggregate replay (`visitEvents`, `loadReplayPageAfterGlobalPosition`) uses `GlobalPosition`, assigned atomically per append batch and stored in a DynamoDB Global Secondary Index. Events are always visited in the order they were committed, regardless of aggregate ID.
+Aggregate streams are ordered by `Playhead`. Cross-aggregate replay (`visitEvents`, `loadReplayPageAfterGlobalPosition`) uses `GlobalPosition`, assigned atomically per append batch and stored in a DynamoDB Global Secondary Index. Events are visited in global **reservation** order, which is not necessarily commit order. Failed appends may leave positions unused. This legacy GSI is eventually consistent; see [migration readiness](docs/migration-readiness.md) for authoritative verification before exporting history.
 
 ## Read Consistency
 
@@ -152,6 +152,12 @@ $eventStore = new DynamoDbEventStore($client, $inputBuilder, $normalizer, 'table
 Global replay reads (`visitEvents`, `loadReplayPageAfterGlobalPosition`) are always eventually consistent — DynamoDB Global Secondary Indexes do not support strongly consistent reads.
 
 `visitEvents()` drains replay pages using a constructor-configurable `replayPageSize`, which defaults to `1000`.
+
+## Migrating away from Broadway
+
+Use the read-only `MigrationInventory` and `MigrationReadinessAuditor` to inventory historical events and reconcile them against the eventually consistent replay index before migrating. The auditor uses an optional `pdo_sqlite` temporary file and does not change the production event store or table.
+
+See [Migration readiness and raw export](docs/migration-readiness.md) for the required write freeze, the audit command, paginated cursors and migration caveats.
 
 ## Core Components
 
