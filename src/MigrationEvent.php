@@ -31,21 +31,33 @@ final class MigrationEvent
      */
     public static function fromItem(array $item): self
     {
-        $metadata = self::map($item, 'Metadata');
-        $payload = self::map($item, 'Payload');
+        try {
+            $metadata = self::map($item, 'Metadata');
+            $payload = self::map($item, 'Payload');
 
-        return new self(
-            self::string($item, 'Id'),
-            self::number($item, 'Playhead'),
-            isset($item['GlobalPosition']) ? self::number($item, 'GlobalPosition') : null,
-            isset($item['Feed']) ? self::string($item, 'Feed') : null,
-            self::string($item, 'Type'),
-            self::string($item, 'RecordedOn'),
-            self::string($metadata, 'Class'),
-            self::string($metadata, 'Payload'),
-            self::string($payload, 'Class'),
-            self::string($payload, 'Payload')
-        );
+            return new self(
+                self::string($item, 'Id'),
+                self::number($item, 'Playhead'),
+                isset($item['GlobalPosition']) ? self::number($item, 'GlobalPosition') : null,
+                isset($item['Feed']) ? self::string($item, 'Feed') : null,
+                self::string($item, 'Type'),
+                self::string($item, 'RecordedOn'),
+                self::string($metadata, 'Class'),
+                self::string($metadata, 'Payload'),
+                self::string($payload, 'Class'),
+                self::string($payload, 'Payload')
+            );
+        } catch (UnexpectedValueException $exception) {
+            $id = ($item['Id'] ?? null)?->getS() ?? '[missing]';
+            $playhead = ($item['Playhead'] ?? null)?->getN() ?? '[missing]';
+
+            throw new UnexpectedValueException(sprintf(
+                'Invalid stored event Id="%s", Playhead="%s": %s',
+                $id,
+                $playhead,
+                $exception->getMessage()
+            ), 0, $exception);
+        }
     }
 
     /**
