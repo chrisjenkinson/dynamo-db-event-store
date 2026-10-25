@@ -17,13 +17,13 @@ These tools **do not convert events**, write to a destination store, or change t
 
    For DynamoDB Local, set `DYNAMODB_ENDPOINT` as well.
 
-   Auditing uses an optional \`pdo_sqlite\` extension and a temporary on-disk SQLite file; it does not load all source identities into PHP memory. Ensure enough local disk is available. The file is removed when auditing completes or throws.
+   Auditing uses an optional `pdo_sqlite` extension and a temporary on-disk SQLite file; it does not load all source identities into PHP memory. Ensure enough local disk is available. The file is removed when auditing completes or throws.
 
    The command prints JSON and exits with `0` if fully reconciled, `1` if discrepancies were found or `2` if the audit could not complete.
 
 4. Investigate all discrepancies and repeat the audit after GSI propagation has caught up. Do not treat an incomplete or failed audit as a valid export.
 
-The audit scans the base table **strongly consistently** and reads the legacy \`Feed-GlobalPosition-index\` GSI **eventually consistently**. It uses temporary SQLite records keyed by aggregate ID/playhead to verify that each source event appears exactly once in the GSI with the same serialized event fields and global position. It checks for missing replay entries, unmatched or duplicate replay entries, duplicate global positions, missing feed/position attributes, and aggregate playhead gaps.
+The audit scans the base table **strongly consistently** and reads the legacy `Feed-GlobalPosition-index` GSI **eventually consistently**. It uses temporary SQLite records keyed by aggregate ID/playhead to verify that each source event appears exactly once in the GSI with the same serialized event fields and global position. It checks for missing replay entries, unmatched or duplicate replay entries, duplicate global positions, missing feed/position attributes, and aggregate playhead gaps.
 
 Global-position gaps **by themselves are not errors**: the Broadway implementation allocates global positions before committing transactions, so failed appends can consume positions. The positions express **reservation order, not a guaranteed commit order**.
 
@@ -43,7 +43,7 @@ A successful audit proves reconciliation for the frozen records observed during 
 
 ## Paginated raw export
 
-Use \`MigrationInventory\` to read DynamoDB's original event fields without deserializing them into Broadway event objects. This is important when historical event PHP classes have been renamed or removed.
+Use `MigrationInventory` to read DynamoDB's original event fields without deserializing them into Broadway event objects. This is important when historical event PHP classes have been renamed or removed.
 
 ```php
 use AsyncAws\DynamoDb\DynamoDbClient;
