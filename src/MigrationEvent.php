@@ -124,7 +124,7 @@ final class MigrationEvent
     {
         $attribute = $item[$name] ?? null;
 
-        if (!$attribute instanceof AttributeValue || !is_array($attribute->getM())) {
+        if (!$attribute instanceof AttributeValue) {
             throw new UnexpectedValueException(sprintf('Missing or invalid map attribute "%s" in stored event.', $name));
         }
 
