@@ -12,7 +12,7 @@ These tools **do not convert events**, write to a destination store, or change t
 
    ```bash
    php -m | grep pdo_sqlite
-   php bin/audit-migration-readiness.php <source-table> [sqlite-working-directory]
+   php bin/audit-migration-readiness.php SOURCE_TABLE [SQLITE_WORKING_DIRECTORY]
    ```
 
    For DynamoDB Local, set `DYNAMODB_ENDPOINT` as well.
