@@ -39,7 +39,7 @@ final class MigrationInventory
         $result = $this->client->scan(new ScanInput($input));
         $events = [];
 
-        foreach ($result->getItems() as $item) {
+        foreach ($result->getItems(true) as $item) {
             // The legacy sequence counter has no event payload.
             if (($item['Id'] ?? null)?->getS() === '_counter' && ($item['Playhead'] ?? null)?->getN() === '0') {
                 continue;
@@ -79,7 +79,7 @@ final class MigrationInventory
         $result = $this->client->query(new QueryInput($input));
         $events = [];
 
-        foreach ($result->getItems() as $item) {
+        foreach ($result->getItems(true) as $item) {
             $events[] = MigrationEvent::fromItem($item);
         }
 
