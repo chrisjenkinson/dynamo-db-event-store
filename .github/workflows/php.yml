@@ -38,6 +38,7 @@ jobs:
         with:
           php-version: ${{ matrix.php-version }}
           tools: composer
+          extensions: pdo_sqlite
           coverage: xdebug
 
       - name: Validate composer.json
@@ -88,6 +89,7 @@ jobs:
         with:
           php-version: '8.3'
           tools: composer
+          extensions: pdo_sqlite
           coverage: xdebug
 
       - name: Install dependencies with Infection 0.35
